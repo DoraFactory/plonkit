@@ -5,6 +5,8 @@ extern crate clap;
 extern crate plonkit;
 
 use clap::Clap;
+use franklin_crypto::bellman::EncodedPoint;
+use franklin_crypto::bellman::bn256::{G1Uncompressed, G2Uncompressed};
 use std::fs::File;
 use std::path::Path;
 use std::str;
@@ -15,6 +17,8 @@ use plonkit::circom_circuit::CircomCircuit;
 use plonkit::plonk;
 use plonkit::reader;
 use plonkit::recursive;
+use plonkit::bellman_ce::to_hex;
+use plonkit::{ ProofStr, VerificationKeyStr };
 
 /// A zkSNARK toolkit to work with circom zkSNARKs DSL in plonk proof system
 #[derive(Clap)]
@@ -400,6 +404,39 @@ fn prove(opts: ProveOpts) {
 
     log::info!("Proving...");
     let proof = setup.prove(circuit, &opts.transcript).unwrap();
+
+    println!("proof is {:?}", proof.clone());
+    let proof_clone = proof.clone();
+
+    let proof_str = ProofStr {
+        num_inputs: proof_clone.num_inputs,
+        n: proof_clone.n,
+        input_values: proof_clone.input_values.into_iter().map(|x| to_hex(&x)).collect(),
+        wire_commitments: proof_clone.wire_commitments.into_iter().map(|x| hex::encode(G1Uncompressed::from_affine(x))).collect(),
+        grand_product_commitment: hex::encode(G1Uncompressed::from_affine(proof_clone.grand_product_commitment)),
+        quotient_poly_commitments: proof_clone.quotient_poly_commitments.into_iter().map(|x| hex::encode(G1Uncompressed::from_affine(x))).collect(),
+        wire_values_at_z: proof_clone.wire_values_at_z.into_iter().map(|x| to_hex(&x)).collect(),
+        wire_values_at_z_omega: proof_clone.wire_values_at_z_omega.into_iter().map(|x| to_hex(&x)).collect(),
+        grand_product_at_z_omega: to_hex(&proof_clone.grand_product_at_z_omega),
+        quotient_polynomial_at_z: to_hex(&proof_clone.quotient_polynomial_at_z),
+        linearization_polynomial_at_z: to_hex(&proof_clone.linearization_polynomial_at_z),
+        permutation_polynomials_at_z: proof_clone.permutation_polynomials_at_z.into_iter().map(|x| to_hex(&x)).collect(),
+        opening_at_z_proof: hex::encode(G1Uncompressed::from_affine(proof_clone.opening_at_z_proof)),
+        opening_at_z_omega_proof: hex::encode(G1Uncompressed::from_affine(proof_clone.opening_at_z_omega_proof))
+    };
+
+    // println!("proof string之后为:{:?}", proof_str);
+    let json_proof = serde_json::to_string(&proof_str).unwrap();
+    if !opts.overwrite {
+        let path = Path::new(&opts.proofjson);
+        assert!(!path.exists(), "duplicate proof json file: {}", path.display());
+        let path = Path::new(&opts.publicjson);
+        assert!(!path.exists(), "duplicate input json file: {}", path.display());
+    }
+    if let Err(err) = std::fs::write("proof.json", json_proof) {
+        eprintln!("Error writing file: {}", err);
+    }
+
     if !opts.overwrite {
         let path = Path::new(&opts.proof);
         assert!(!path.exists(), "duplicate proof file: {}", path.display());
@@ -409,16 +446,11 @@ fn prove(opts: ProveOpts) {
     log::info!("Proof saved to {}", opts.proof);
 
     let (inputs, serialized_proof) = bellman_vk_codegen::serialize_proof(&proof);
-    let ser_proof_str = serde_json::to_string_pretty(&serialized_proof).unwrap();
+    // let ser_proof_str = serde_json::to_string_pretty(&serialized_proof).unwrap();
     let ser_inputs_str = serde_json::to_string_pretty(&inputs).unwrap();
-    if !opts.overwrite {
-        let path = Path::new(&opts.proofjson);
-        assert!(!path.exists(), "duplicate proof json file: {}", path.display());
-        let path = Path::new(&opts.publicjson);
-        assert!(!path.exists(), "duplicate input json file: {}", path.display());
-    }
-    std::fs::write(&opts.proofjson, ser_proof_str.as_bytes()).expect("save proofjson err");
-    log::info!("Proof json saved to {}", opts.proofjson);
+    
+/*     std::fs::write(&opts.proofjson, ser_proof_str.as_bytes()).expect("save proofjson err");
+    log::info!("Proof json saved to {}", opts.proofjson); */
     std::fs::write(&opts.publicjson, ser_inputs_str.as_bytes()).expect("save publicjson err");
     log::info!("Public input json saved to {}", opts.publicjson);
 }
@@ -493,7 +525,25 @@ fn export_vk(opts: ExportVerificationKeyOpts) {
 
     let setup = plonk::SetupForProver::prepare_setup_for_prover(circuit, reader::load_key_monomial_form(&opts.srs_monomial_form), None)
         .expect("prepare err");
-    let vk = setup.make_verification_key().unwrap();
+    let vk: franklin_crypto::bellman::plonk::VerificationKey<Bn256, franklin_crypto::bellman::plonk::better_cs::cs::PlonkCsWidth4WithNextStepParams> = setup.make_verification_key().unwrap();
+
+    let vk_clone = vk.clone();
+    let vkey_str = VerificationKeyStr {
+        n: vk_clone.n,
+        num_inputs: vk_clone.num_inputs,
+        selector_commitments: vk_clone.selector_commitments.into_iter().map(|x| hex::encode(G1Uncompressed::from_affine(x))).collect(),
+        next_step_selector_commitments: vk_clone.next_step_selector_commitments.into_iter().map(|x| hex::encode(G1Uncompressed::from_affine(x))).collect(),
+        permutation_commitments: vk_clone.permutation_commitments.into_iter().map(|x| hex::encode(G1Uncompressed::from_affine(x))).collect(),
+        non_residues: vk_clone.non_residues.into_iter().map(|x| to_hex(&x)).collect(),
+        g2_elements: vk_clone.g2_elements.into_iter().map(|x| hex::encode(G2Uncompressed::from_affine(x))).collect(),
+    };
+
+    // println!("vkey string之后为:{:?}", vkey_str);
+    let json_vkey = serde_json::to_string(&vkey_str).unwrap();
+
+    if let Err(err) = std::fs::write("verification_key.json", json_vkey) {
+        eprintln!("Error writing file: {}", err);
+    }
     if !opts.overwrite {
         let path = Path::new(&opts.vk);
         assert!(!path.exists(), "duplicate vk file: {}", path.display());
