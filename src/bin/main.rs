@@ -189,8 +189,8 @@ struct ExportVerificationKeyOpts {
     /// Output verifying key file
     #[clap(short = "v", long = "vk", default_value = "vk.bin")]
     vk: String,
-    #[clap(long = "vk_json", default_value = "verification_key.json")]
-    vk_json: String,
+    #[clap(long = "vkeyjson", default_value = "verification_key.json")]
+    vkeyjson: String,
     #[clap(long = "overwrite")]
     overwrite: bool,
 }
@@ -540,7 +540,7 @@ fn export_vk(opts: ExportVerificationKeyOpts) {
     // println!("vkey string之后为:{:?}", vkey_str);
     let json_vkey = serde_json::to_string(&vkey_str).unwrap();
 
-    if let Err(err) = std::fs::write(opts.vk_json, json_vkey) {
+    if let Err(err) = std::fs::write(opts.vkeyjson, json_vkey) {
         eprintln!("Error writing file: {}", err);
     }
     if !opts.overwrite {
