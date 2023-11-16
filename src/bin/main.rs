@@ -189,6 +189,8 @@ struct ExportVerificationKeyOpts {
     /// Output verifying key file
     #[clap(short = "v", long = "vk", default_value = "vk.bin")]
     vk: String,
+    #[clap(long = "vk_json", default_value = "verification_key.json")]
+    vk_json: String,
     #[clap(long = "overwrite")]
     overwrite: bool,
 }
@@ -425,7 +427,6 @@ fn prove(opts: ProveOpts) {
         opening_at_z_omega_proof: hex::encode(G1Uncompressed::from_affine(proof_clone.opening_at_z_omega_proof))
     };
 
-    // println!("proof string之后为:{:?}", proof_str);
     let json_proof = serde_json::to_string(&proof_str).unwrap();
     if !opts.overwrite {
         let path = Path::new(&opts.proofjson);
@@ -433,7 +434,8 @@ fn prove(opts: ProveOpts) {
         let path = Path::new(&opts.publicjson);
         assert!(!path.exists(), "duplicate input json file: {}", path.display());
     }
-    if let Err(err) = std::fs::write("proof.json", json_proof) {
+    // write proof.json
+    if let Err(err) = std::fs::write(&opts.proofjson, json_proof) {
         eprintln!("Error writing file: {}", err);
     }
 
@@ -443,14 +445,11 @@ fn prove(opts: ProveOpts) {
     }
     let writer = File::create(&opts.proof).unwrap();
     proof.write(writer).unwrap();
-    log::info!("Proof saved to {}", opts.proof);
+    log::info!("Proof bin saved to {}", opts.proof);
 
     let (inputs, serialized_proof) = bellman_vk_codegen::serialize_proof(&proof);
-    // let ser_proof_str = serde_json::to_string_pretty(&serialized_proof).unwrap();
     let ser_inputs_str = serde_json::to_string_pretty(&inputs).unwrap();
     
-/*     std::fs::write(&opts.proofjson, ser_proof_str.as_bytes()).expect("save proofjson err");
-    log::info!("Proof json saved to {}", opts.proofjson); */
     std::fs::write(&opts.publicjson, ser_inputs_str.as_bytes()).expect("save publicjson err");
     log::info!("Public input json saved to {}", opts.publicjson);
 }
@@ -541,7 +540,7 @@ fn export_vk(opts: ExportVerificationKeyOpts) {
     // println!("vkey string之后为:{:?}", vkey_str);
     let json_vkey = serde_json::to_string(&vkey_str).unwrap();
 
-    if let Err(err) = std::fs::write("verification_key.json", json_vkey) {
+    if let Err(err) = std::fs::write(opts.vk_json, json_vkey) {
         eprintln!("Error writing file: {}", err);
     }
     if !opts.overwrite {
